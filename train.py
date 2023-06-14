@@ -9,7 +9,8 @@ from torch.utils.data import Dataset, DataLoader
 from utils.dataset import PatternDataset
 import numpy as np
 
-
+W = 100
+H = 50
 
 # conditionAL VAE
 class VAE(nn.Module):
@@ -46,7 +47,7 @@ class VAE(nn.Module):
     
     def forward(self, x, score):
         code = score.view(-1,1)
-        mu, log_var = self.encoder(x.view(-1, 900),code)
+        mu, log_var = self.encoder(x.view(-1, H*W),code)
         z = self.sampling(mu, log_var)
         return self.decoder(z,code), mu, log_var
 
@@ -71,7 +72,7 @@ class Proxy(nn.Module):
 
 # return reconstruction error + KL divergence losses
 def loss_function(recon_x, x, mu, log_var):
-    BCE = F.binary_cross_entropy(recon_x, x.view(-1, 900), reduction='sum')
+    BCE = F.binary_cross_entropy(recon_x, x.view(-1, H*W), reduction='sum')
     KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
     return BCE + KLD
 
@@ -165,8 +166,8 @@ if __name__ == "__main__":
             transforms.ToTensor(),
         ]
     )
-    dataset = PatternDataset(path ='data/version1/',train=True,transform=transform)
-    dataset_validation = PatternDataset(path ='data/version1/',train=False,transform=transform)
+    dataset = PatternDataset(path ='data/version2/',train=True,transform=transform)
+    dataset_validation = PatternDataset(path ='data/version2/',train=False,transform=transform)
 
     dataloader = DataLoader(dataset=dataset,
                         batch_size=64,
@@ -184,10 +185,10 @@ if __name__ == "__main__":
     ##########################################################
 
     # proxy model (score approximation of y = f(x))
-    proxy = Proxy(x_dim = 900, h_dim = 2048)
+    proxy = Proxy(x_dim = H*W, h_dim = 2048)
 
     # conditional VAE (generator for p(x|y))
-    vae = VAE(x_dim=900, h_dim1= 512, h_dim2=256, z_dim=2)
+    vae = VAE(x_dim=H*W, h_dim1= 1024, h_dim2=1024, z_dim=2)
 
 
     if torch.cuda.is_available():
@@ -196,7 +197,7 @@ if __name__ == "__main__":
 
 
     # optimizer setting
-    optimizer_proxy = optim.Adam(proxy.parameters(),lr=1e-5,
+    optimizer_proxy = optim.Adam(proxy.parameters(),lr=1e-4,
                             weight_decay=1e-6)
     optimizer_vae = optim.Adam(vae.parameters(),lr=1e-4)
 
@@ -222,7 +223,7 @@ if __name__ == "__main__":
 
 
     # training conditional generator
-    for epoch in range(100):
+    for epoch in range(500):
         train(epoch,dataloader)
 
 
@@ -253,8 +254,8 @@ if __name__ == "__main__":
 
 
         # save numpy data
-        np_save = topk_samples.view(200, 30, 30).cpu().numpy()
+        np_save = topk_samples.view(200, W, H).cpu().numpy()
         np.save('output.npy',np_save)
 
         # save image
-        save_image(topk_samples.view(200, 1, 30, 30), './samples/sample_' + '.png')
+        save_image(topk_samples.view(200, 1, W, H), './samples/sample_' + '.png')
